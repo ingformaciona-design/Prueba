@@ -1,0 +1,43 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+from pyspark.ml.feature import VectorAssembler
+from dotenv import load_dotenv
+from pathlib import Path
+import os
+from urllib.parse import quote_plus
+
+def get_spark_session():
+
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    load_dotenv(dotenv_path=env_path)
+
+    user = os.getenv("MONGO_USER")
+    password = quote_plus(os.getenv("MONGO_PASSWORD"))
+    cluster = os.getenv("MONGO_CLUSTER")
+    database = os.getenv("MONGO_DB")
+    collection_name = os.getenv("MONGO_COLLECTION")
+
+    mongo_uri = f"mongodb+srv://{user}:{password}@{cluster}"
+
+    spark = SparkSession.builder \
+        .appName("BigDataMLModule") \
+        .config("spark.jars.packages",
+                "org.mongodb.spark:mongo-spark-connector_2.13:10.3.0") \
+        .config("spark.mongodb.read.connection.uri", mongo_uri) \
+        .config("spark.mongodb.read.database", database) \
+        .config("spark.mongodb.read.collection", collection_name) \
+        .getOrCreate()
+
+    df = spark.read.format("mongodb").load()
+
+    # Ingeniería de features básica
+    df = df.withColumn("ingreso", col("cantidad") * col("precio"))
+
+    assembler = VectorAssembler(
+        inputCols=["cantidad", "precio", "ingreso"],
+        outputCol="features"
+    )
+
+    df_vector = assembler.transform(df)
+
+    return spark, df, df_vector
